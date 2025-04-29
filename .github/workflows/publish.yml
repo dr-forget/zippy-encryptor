@@ -128,7 +128,7 @@ jobs:
         run: |
           cd zippy-encryptor
           npm version patch
-          pnpm version patch
+          npm version patch
 
       - name: Setup .npmrc for publish
         run: |
