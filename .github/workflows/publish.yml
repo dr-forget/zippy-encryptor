@@ -1,7 +1,7 @@
 name: Build and Publish Node Addon (Windows Only)
 
 on:
-  workflow_dispatch: # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   build:
@@ -45,10 +45,6 @@ jobs:
           node build.js
           node convert.js
 
-      - name: Show all .node files (debug)
-        run: dir /s /b *.node || echo "No .node files found"
-        shell: cmd
-
       - name: Copy .node files to zippy-encyptor
         run: |
           if not exist zippy-encyptor mkdir zippy-encyptor
@@ -56,14 +52,23 @@ jobs:
         shell: cmd
 
       - name: List files in zippy-encyptor
-        run: |
-          echo Files in zippy-encyptor:
-          dir zippy-encyptor
+        run: dir zippy-encyptor
         shell: cmd
 
-      - name: Upload artifacts
+      - name: Get .node file name for artifact
+        id: get-filename
+        shell: pwsh
+        run: |
+          $file = Get-ChildItem -Path "zippy-encyptor" -Filter "encryptor.*.node" | Select-Object -First 1
+          if ($null -eq $file) {
+            Write-Error "No .node file found in zippy-encyptor"
+            exit 1
+          }
+          "name=$($file.Name)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.built-file.outputs.name }}
-          path: zippy-encyptor/${{ steps.built-file.outputs.name }}
+          name: ${{ steps.get-filename.outputs.name }}
+          path: zippy-encyptor/${{ steps.get-filename.outputs.name }}
           retention-days: 7
