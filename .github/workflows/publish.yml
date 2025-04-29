@@ -3,9 +3,6 @@ name: Build and Publish Node Addon
 on:
   workflow_dispatch:
 
-env:
-  PACKAGE_DIR: zippy-encyptor
-
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -13,14 +10,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
-            platform: win32
-            arch: x64
-            target: x86_64-pc-windows-msvc
-          - os: windows-latest
-            platform: win32
-            arch: ia32
-            target: i686-pc-windows-msvc
           - os: ubuntu-latest
             platform: linux
             arch: x64
@@ -33,14 +22,6 @@ jobs:
             platform: linux
             arch: arm
             target: armv7-unknown-linux-gnueabihf
-          - os: ubuntu-latest
-            platform: android
-            arch: arm64
-            target: aarch64-linux-android
-          - os: ubuntu-latest
-            platform: android
-            arch: arm
-            target: armv7-linux-androideabi
           - os: macos-latest
             platform: darwin
             arch: x64
@@ -49,6 +30,22 @@ jobs:
             platform: darwin
             arch: arm64
             target: aarch64-apple-darwin
+          - os: windows-latest
+            platform: win32
+            arch: x64
+            target: x86_64-pc-windows-msvc
+          - os: windows-latest
+            platform: win32
+            arch: ia32
+            target: i686-pc-windows-msvc
+          - os: ubuntu-latest
+            platform: android
+            arch: arm64
+            target: aarch64-linux-android
+          - os: ubuntu-latest
+            platform: android
+            arch: arm
+            target: armv7-linux-androideabi
 
     steps:
       - uses: actions/checkout@v4
@@ -59,7 +56,7 @@ jobs:
           node-version: 22.x
           cache: "npm"
 
-      - name: Setup Rust
+      - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -67,76 +64,81 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install cross-compilation tools for ARM
-        if: matrix.target == 'aarch64-unknown-linux-gnu' || matrix.target == 'armv7-unknown-linux-gnueabihf'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-                              gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
-
-      - name: Set CC and CXX for ARM targets
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-
-      - name: Set CC and CXX for ARMv7 targets
-        if: matrix.target == 'armv7-unknown-linux-gnueabihf'
-        run: echo "CC=arm-linux-gnueabihf-gcc" >> $GITHUB_ENV
-
-      - name: Build native addon
+      - name: Build native addon for specific target
         run: npx napi build --platform --release --target ${{ matrix.target }}
 
-      - name: Rename .node file
+      - name: Run additional build scripts
         run: |
-          FILE_NAME=encryptor.${{ matrix.platform }}-${{ matrix.arch }}.node
-          mv *.node $FILE_NAME
+          node build.js
+          node convert.js
+
+      - name: Create output directory
+        run: mkdir -p zippy-encyptor
         shell: bash
 
-      - name: Copy .node file to output (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: Handle .node files for non-Windows platforms
+        if: matrix.os != 'windows-latest'
         run: |
-          mkdir -p $PACKAGE_DIR
-          cp encryptor.*.node $PACKAGE_DIR/
+          find ./artifacts -name "*.node" -exec mv {} zippy-encyptor/ \;
+        shell: bash
 
-      - name: Copy .node file to output (Windows)
-        if: runner.os == 'Windows'
+      - name: Handle .node files for Windows
+        if: matrix.os == 'windows-latest'
         run: |
-          mkdir %PACKAGE_DIR%
-          for %%f in (encryptor.*.node) do copy %%f %PACKAGE_DIR%\
+          for /R %%i in (*.node) do copy "%%i" zippy-encyptor\
         shell: cmd
 
-      - name: Upload artifact
+      - name: List files in zippy-encyptor directory (before upload)
+        run: |
+          echo "Files in zippy-encyptor directory:"
+          ls -la zippy-encyptor/
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: encryptor.${{ matrix.platform }}-${{ matrix.arch }}.node
-          path: ${{ env.PACKAGE_DIR }}/encryptor.${{ matrix.platform }}-${{ matrix.arch }}.node
+          name: node-addons-${{ matrix.platform }}-${{ matrix.arch }}
+          path: zippy-encyptor/
           retention-days: 7
+          if-no-files-found: warn
+          compression-level: 6
+          overwrite: false
+          include-hidden-files: false
 
-  release:
+  collect-artifacts:
     needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Read version
-        id: version
-        run: |
-          echo "version=$(jq -r .version $PACKAGE_DIR/package.json)" >> $GITHUB_OUTPUT
+      - name: Create output directory
+        run: mkdir -p zippy-encyptor
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: $PACKAGE_DIR
+          path: artifacts/
 
-      - name: List all .node files
+      - name: Combine artifacts
         run: |
-          echo "Built .node files:"
-          find $PACKAGE_DIR -name "*.node" -exec ls -l {} \;
+          if [ -d "artifacts" ]; then
+            for dir in artifacts/*; do
+              if [ -d "$dir" ]; then
+                cp -r "$dir"/* zippy-encyptor/ || echo "No files to copy from $dir"
+              fi
+            done
+          else
+            echo "Warning: artifacts directory not found"
+          fi
 
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
+          echo "Content of current directory:"
+          ls -la
+
+          echo "Content of zippy-encyptor directory:"
+          ls -la zippy-encyptor/ || echo "zippy-encyptor directory not found"
+
+      - name: Upload combined artifacts
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: v${{ steps.version.outputs.version }}
-          files: ${{ env.PACKAGE_DIR }}/*.node
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: node-addons-all-platforms
+          path: zippy-encyptor/
+          retention-days: 7
