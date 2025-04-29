@@ -79,12 +79,16 @@ jobs:
           node build.js
           node convert.js
 
+      - name: Create output directory
+        run: mkdir -p zippy-encryptor
+        shell: bash
+
       - name: Handle .node files for non-Windows platforms
         if: matrix.os != 'windows-latest'
         run: |
           for file in $(find . -name "*.node"); do
             filename=$(basename "$file")
-            cp "$file" "zippy-encyptor/$filename"
+            cp "$file" "zippy-encryptor/$filename"
             echo "NODE_FILENAME=$filename" >> $GITHUB_ENV
           done
         shell: bash
@@ -93,23 +97,23 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: |
           for /R . %%i in (*.node) do (
-            if not "%%~dpi" == "%CD%\zippy-encyptor\" (
-              copy "%%i" "zippy-encyptor\"
+            if not "%%~dpi" == "%CD%\zippy-encryptor\" (
+              copy "%%i" "zippy-encryptor\"
               echo NODE_FILENAME=%%~nxi>> %GITHUB_ENV%
             )
           )
         shell: cmd
 
-      - name: List files in zippy-encyptor directory (before upload)
+      - name: List files in zippy-encryptor directory (before upload)
         run: |
-          echo "Files in zippy-encyptor directory:"
-          ls -la zippy-encyptor/
+          echo "Files in zippy-encryptor directory:"
+          ls -la zippy-encryptor/
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.NODE_FILENAME || format('node-addon-{0}-{1}', matrix.platform, matrix.arch) }}
-          path: zippy-encyptor/
+          path: zippy-encryptor/
           retention-days: 7
           if-no-files-found: warn
           compression-level: 6
@@ -123,7 +127,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Create output directory
-        run: mkdir -p zippy-encyptor
+        run: mkdir -p zippy-encryptor
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -135,7 +139,7 @@ jobs:
           if [ -d "artifacts" ]; then
             for dir in artifacts/*; do
               if [ -d "$dir" ]; then
-                cp -r "$dir"/* zippy-encyptor/ || echo "No files to copy from $dir"
+                cp -r "$dir"/* zippy-encryptor/ || echo "No files to copy from $dir"
               fi
             done
           else
@@ -145,12 +149,12 @@ jobs:
           echo "Content of current directory:"
           ls -la
 
-          echo "Content of zippy-encyptor directory:"
-          ls -la zippy-encyptor/ || echo "zippy-encyptor directory not found"
+          echo "Content of zippy-encryptor directory:"
+          ls -la zippy-encryptor/ || echo "zippy-encryptor directory not found"
 
       - name: Upload combined artifacts
         uses: actions/upload-artifact@v4
         with:
           name: node-addons-all-platforms
-          path: zippy-encyptor/
+          path: zippy-encryptor/
           retention-days: 7
