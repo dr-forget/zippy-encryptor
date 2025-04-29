@@ -106,7 +106,12 @@ jobs:
       - name: List files in zippy-encryptor directory (before upload)
         run: |
           echo "Files in zippy-encryptor directory:"
-          ls -la zippy-encryptor/
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            dir zippy-encryptor
+          else
+            ls -la zippy-encryptor/
+          fi
+        shell: bash
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
