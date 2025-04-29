@@ -1,7 +1,10 @@
-name: Build and Publish Node Addon (Windows Only)
+name: Build and Publish Node Addon
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - "zippy-encyptor/package.json"
 
 jobs:
   build:
@@ -18,10 +21,33 @@ jobs:
             platform: win32
             arch: ia32
             target: i686-pc-windows-msvc
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-latest
+            platform: linux
+            arch: arm64
+            target: aarch64-unknown-linux-gnu
+          - os: macos-latest
+            platform: darwin
+            arch: x64
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            platform: darwin
+            arch: arm64
+            target: aarch64-apple-darwin
+          - os: ubuntu-latest
+            platform: android
+            arch: arm64
+            target: aarch64-linux-android
+          - os: ubuntu-latest
+            platform: android
+            arch: arm
+            target: armv7-linux-androideabi
 
     steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Use Node.js 22.x
         uses: actions/setup-node@v3
@@ -29,7 +55,7 @@ jobs:
           node-version: 22.x
           cache: "npm"
 
-      - name: Setup Rust toolchain
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -40,35 +66,69 @@ jobs:
       - name: Build native addon
         run: npx napi build --platform --release --target ${{ matrix.target }}
 
-      - name: Run additional build scripts
+      - name: Run extra build steps
         run: |
           node build.js
           node convert.js
 
-      - name: Copy .node files to zippy-encyptor
+      - name: Copy .node to zippy-encyptor (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p zippy-encyptor
+          cp encryptor.*.node zippy-encyptor/
+        shell: bash
+
+      - name: Copy .node to zippy-encyptor (Windows)
+        if: runner.os == 'Windows'
         run: |
           if not exist zippy-encyptor mkdir zippy-encyptor
           for %%f in (encryptor.*.node) do copy "%%f" zippy-encyptor\
         shell: cmd
 
-      - name: List files in zippy-encyptor
-        run: dir zippy-encyptor
-        shell: cmd
-
-      - name: Get .node file name for artifact
-        id: get-filename
-        shell: pwsh
-        run: |
-          $file = Get-ChildItem -Path "zippy-encyptor" -Filter "encryptor.*.node" | Select-Object -First 1
-          if ($null -eq $file) {
-            Write-Error "No .node file found in zippy-encyptor"
-            exit 1
-          }
-          "name=$($file.Name)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-      - name: Upload artifact
+      - name: Upload artifact for this target
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.get-filename.outputs.name }}
-          path: zippy-encyptor/${{ steps.get-filename.outputs.name }}
-          retention-days: 7
+          name: ${{ matrix.platform }}-${{ matrix.arch }}
+          path: zippy-encyptor/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Prepare release files
+        run: |
+          mkdir -p zippy-encyptor
+          for dir in artifacts/*; do
+            if [ -d "$dir" ]; then
+              cp "$dir"/*.node zippy-encyptor/ || echo "No .node files in $dir"
+            fi
+          done
+
+      - name: Extract version from package.json
+        id: get_version
+        run: |
+          VERSION=$(jq -r .version zippy-encyptor/package.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create zip archive
+        run: zip -j zippy-encyptor/all-platforms.zip zippy-encyptor/*.node
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: Release v${{ steps.get_version.outputs.version }}
+          body: |
+            Automated release for version v${{ steps.get_version.outputs.version }}
+          files: |
+            zippy-encyptor/*.node
+            zippy-encyptor/all-platforms.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
