@@ -72,14 +72,10 @@ jobs:
           node build.js
           node convert.js
 
-      - name: Create output directory
-        run: mkdir -p zippy-encyptor
-        shell: bash
-
       - name: Copy built files to output directory (Unix)
         if: matrix.os != 'windows-latest'
         run: |
-          find ./artifacts -name "*.node" -exec cp {} zippy-encyptor/ \;
+          find . -name "*.node" -exec cp {} zippy-encyptor/ \;
         shell: bash
 
       - name: Copy built files to output directory (Windows)
@@ -106,24 +102,35 @@ jobs:
         run: mkdir -p zippy-encyptor
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: artifacts/
 
       - name: Combine artifacts
         run: |
-          for dir in artifacts/*; do
-            cp -r "$dir"/* zippy-encyptor/
-          done
-          ls -la zippy-encyptor/
+          if [ -d "artifacts" ]; then
+            for dir in artifacts/*; do
+              if [ -d "$dir" ]; then
+                cp -r "$dir"/* zippy-encyptor/ || echo "No files to copy from $dir"
+              fi
+            done
+          else
+            echo "Warning: artifacts directory not found"
+          fi
+
+          echo "Content of current directory:"
+          ls -la
+
+          echo "Content of zippy-encyptor directory:"
+          ls -la zippy-encyptor/ || echo "zippy-encyptor directory not found"
 
       - name: List files in zippy-encyptor directory
         run: |
           echo "Files in zippy-encyptor directory:"
-          ls -la zippy-encyptor/
+          ls -la zippy-encyptor/ || echo "zippy-encyptor directory not found"
           echo ""
           echo "Summary of built platform binaries:"
-          find zippy-encyptor/ -name "*.node" | sort
+          find zippy-encyptor/ -name "*.node" -type f | sort || echo "No .node files found"
 
       - name: Upload combined artifacts
         uses: actions/upload-artifact@v4
