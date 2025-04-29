@@ -1,0 +1,16 @@
+{
+  "name": "@zippybee/encryptor",
+  "version": "1.0.0",
+  "main": "index.js",
+  "module": "index.mjs",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "convert": "node ../convert.js",
+    "convert:simple": "node ../convert-simple.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "types": "./index.d.ts",
+  "description": "A utility library for encryption and decryption"
+}
