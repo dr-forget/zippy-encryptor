@@ -57,12 +57,9 @@ jobs:
           cache: "npm"
 
       - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
-          toolchain: stable
-          target: ${{ matrix.target }}
-          override: true
+          targets: ${{ matrix.target }}
 
       - name: Install dependencies
         run: npm ci
@@ -93,7 +90,7 @@ jobs:
         shell: cmd
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: node-addon-${{ matrix.target }}
           path: zippy-encyptor/
@@ -129,7 +126,7 @@ jobs:
           find zippy-encyptor/ -name "*.node" | sort
 
       - name: Upload combined artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: node-addons-all-platforms
           path: zippy-encyptor/
