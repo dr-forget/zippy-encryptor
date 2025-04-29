@@ -124,41 +124,40 @@ jobs:
           overwrite: false
           include-hidden-files: false
 
-  collect-artifacts:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Create output directory
-        run: mkdir -p zippy-encryptor
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts/
-
-      - name: Combine artifacts
+      - name: Upload version
         run: |
-          if [ -d "artifacts" ]; then
-            for dir in artifacts/*; do
-              if [ -d "$dir" ]; then
-                cp -r "$dir"/* zippy-encryptor/ || echo "No files to copy from $dir"
-              fi
-            done
-          else
-            echo "Warning: artifacts directory not found"
-          fi
+          cd zippy-encryptor
+          npm version patch
+          pnpm version patch
 
-          echo "Content of current directory:"
-          ls -la
+      - name: Setup .npmrc for publish
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >  ~/.npmrc
 
-          echo "Content of zippy-encryptor directory:"
-          ls -la zippy-encryptor/ || echo "zippy-encryptor directory not found"
+      - name: Get version from zippy-encyptor/package.json & publish
+        id: get_version
+        run: |
+          npm publish --access public
+          VERSION=$(jq -r '.version' zippy-encyptor/package.json)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      - name: Upload combined artifacts
-        uses: actions/upload-artifact@v4
+      - name: Tag the commit with release version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"]
+          git add .
+          git commit -m "chore: update version to ${{ env.latest_release }}"  # 提交更新
+          git push
+          git tag ${{ env.package_version }}  # 为提交添加 release 版本标签
+          git push origin ${{ env.package_version }}  # 推送标签到远程
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
         with:
-          name: node-addons-all-platforms
-          path: zippy-encryptor/
-          retention-days: 7
+          tag_name: ${{ env.VERSION }}
+          name: Release ${{ env.VERSION }}
+          body: |
+            ## Release Notes
+            - Version: ${{ env.VERSION }}
+          files: |
+            zippy-encryptor/*.node
