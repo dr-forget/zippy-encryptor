@@ -1,7 +1,7 @@
 name: Build and Publish Node Addon
 
 on:
-  workflow_dispatch: # 允许手动触发工作流
+  workflow_dispatch:
 
 jobs:
   build:
@@ -72,18 +72,19 @@ jobs:
           node build.js
           node convert.js
 
-      - name: Copy built files to output directory (Unix)
+      - name: Copy built files to zippy-encyptor (Unix)
         if: matrix.os != 'windows-latest'
         run: |
           find . -name "*.node" -exec cp {} zippy-encyptor/ \;
         shell: bash
 
-      - name: Copy built files to output directory (Windows)
+      - name: Copy built files to zippy-encyptor (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          mkdir -p zippy-encyptor
-          for /R artifacts %%i in (*.node) do copy "%%i" zippy-encyptor\
-        shell: cmd
+          Get-ChildItem -Recurse -Filter *.node | ForEach-Object {
+            Copy-Item $_.FullName -Destination "zippy-encyptor"
+          }
+        shell: pwsh
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -98,9 +99,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create output directory
-        run: mkdir -p zippy-encyptor
-
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -108,21 +106,11 @@ jobs:
 
       - name: Combine artifacts
         run: |
-          if [ -d "artifacts" ]; then
-            for dir in artifacts/*; do
-              if [ -d "$dir" ]; then
-                cp -r "$dir"/* zippy-encyptor/ || echo "No files to copy from $dir"
-              fi
-            done
-          else
-            echo "Warning: artifacts directory not found"
-          fi
-
-          echo "Content of current directory:"
-          ls -la
-
-          echo "Content of zippy-encyptor directory:"
-          ls -la zippy-encyptor/ || echo "zippy-encyptor directory not found"
+          for dir in artifacts/*; do
+            if [ -d "$dir" ]; then
+              cp -r "$dir"/* zippy-encyptor/ || echo "No files to copy from $dir"
+            fi
+          done
 
       - name: List files in zippy-encyptor directory
         run: |
