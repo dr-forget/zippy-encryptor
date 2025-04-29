@@ -88,7 +88,8 @@ jobs:
       - name: Copy built files to output directory (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          for %%i in (*.node) do copy "%%i" zippy-encyptor\
+          # Ensure the correct path and matching pattern for .node files
+          for %%i in (encryptor.*.node) do copy "%%i" zippy-encyptor\
         shell: cmd
 
       - name: Upload artifacts
