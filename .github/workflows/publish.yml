@@ -86,21 +86,20 @@ jobs:
       - name: Handle .node files for non-Windows platforms
         if: matrix.os != 'windows-latest'
         run: |
-          for file in $(find . -name "*.node"); do
-            filename=$(basename "$file")
-            cp "$file" "zippy-encryptor/$filename"
-            echo "NODE_FILENAME=$filename" >> $GITHUB_ENV
+          for file in *.node; do
+            if [ -f "$file" ]; then
+              cp "$file" "zippy-encryptor/$file"
+              echo "NODE_FILENAME=$file" >> $GITHUB_ENV
+            fi
           done
         shell: bash
 
       - name: Handle .node files for Windows
         if: matrix.os == 'windows-latest'
         run: |
-          for /R . %%i in (*.node) do (
-            if not "%%~dpi" == "%CD%\zippy-encryptor\" (
-              copy "%%i" "zippy-encryptor\"
-              echo NODE_FILENAME=%%~nxi>> %GITHUB_ENV%
-            )
+          for %%i in (*.node) do (
+            copy "%%i" "zippy-encryptor\"
+            echo NODE_FILENAME=%%~nxi>> %GITHUB_ENV%
           )
         shell: cmd
 
