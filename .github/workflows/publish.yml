@@ -3,6 +3,10 @@ name: Build and Publish Node Addon
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write # 允许写入代码库内容
+  packages: write # 允许写入包
+  id-token: write # 允许写入 ID 令牌
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -73,11 +77,6 @@ jobs:
 
       - name: Build native addon for specific target
         run: npx napi build --platform --release --target ${{ matrix.target }}
-
-      - name: Run additional build scripts
-        run: |
-          node build.js
-          node convert.js
 
       - name: List and copy .node files
         if: matrix.os != 'windows-latest'
@@ -159,6 +158,7 @@ jobs:
       - name: Update version and publish
         run: |
           cd zippy-encryptor
+          npm version patch
           npm version patch
           # 获取新版本号
           VERSION=$(node -p "require('./package.json').version")
