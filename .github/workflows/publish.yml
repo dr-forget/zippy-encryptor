@@ -1,7 +1,7 @@
 name: Build and Publish Node Addon (Windows Only)
 
 on:
-  workflow_dispatch: # 手动触发
+  workflow_dispatch: # 允许手动触发
 
 jobs:
   build:
@@ -20,7 +20,8 @@ jobs:
             target: i686-pc-windows-msvc
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source code
+        uses: actions/checkout@v4
 
       - name: Use Node.js 22.x
         uses: actions/setup-node@v3
@@ -44,7 +45,7 @@ jobs:
           node build.js
           node convert.js
 
-      - name: Show built files
+      - name: Show all .node files (debug)
         run: dir /s /b *.node || echo "No .node files found"
         shell: cmd
 
@@ -54,8 +55,10 @@ jobs:
           for %%f in (encryptor.*.node) do copy "%%f" zippy-encyptor\
         shell: cmd
 
-      - name: List copied files
-        run: dir zippy-encyptor
+      - name: List files in zippy-encyptor
+        run: |
+          echo Files in zippy-encyptor:
+          dir zippy-encyptor
         shell: cmd
 
       - name: Upload artifacts
