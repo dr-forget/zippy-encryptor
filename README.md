@@ -137,7 +137,7 @@ processLargeFile();
 运行演示:
 
 ```bash
-node test.js
+node example/index.js
 ```
 
 ## API 参考 / API Reference
@@ -165,42 +165,6 @@ Standard file encryption. Suitable for small to medium-sized files.
 标准解密文件。适合小到中等大小的文件。
 
 Standard file decryption. Suitable for small to medium-sized files.
-
-- `algorithm`: 字符串，'aes'或'chacha20poly1305'
-- `key`: Buffer，32 字节（256 位）
-- `input_path`: 字符串，加密文件的路径
-- `output_path`: 字符串，解密后输出文件的路径
-- 返回: Promise<void>，操作完成时解析
-
-- `algorithm`: String, either 'aes' or 'chacha20poly1305'
-- `key`: Buffer, 32 bytes (256 bits)
-- `input_path`: String, path to the encrypted file
-- `output_path`: String, path for the decrypted output file
-- Returns: Promise<void> that resolves when the operation is complete
-
-### `streamEncryptFile(algorithm, key, input_path, output_path)`
-
-分块加密文件。适合大型文件，使用较少内存。
-
-Chunked file encryption. Suitable for large files with minimal memory usage.
-
-- `algorithm`: 字符串，'aes'或'chacha20poly1305'
-- `key`: Buffer，32 字节（256 位）
-- `input_path`: 字符串，输入文件的路径
-- `output_path`: 字符串，加密后输出文件的路径
-- 返回: Promise<void>，操作完成时解析
-
-- `algorithm`: String, either 'aes' or 'chacha20poly1305'
-- `key`: Buffer, 32 bytes (256 bits)
-- `input_path`: String, path to the input file
-- `output_path`: String, path for the encrypted output file
-- Returns: Promise<void> that resolves when the operation is complete
-
-### `streamDecryptFile(algorithm, key, input_path, output_path)`
-
-分块解密文件。适合大型文件，使用较少内存。
-
-Chunked file decryption. Suitable for large files with minimal memory usage.
 
 - `algorithm`: 字符串，'aes'或'chacha20poly1305'
 - `key`: Buffer，32 字节（256 位）
@@ -244,47 +208,6 @@ ISC
 
 For files larger than 8GB (such as 20GB videos), the built-in `streamEncryptFile` and `streamDecryptFile` functions may encounter memory limitations. In such cases, you can use the chunked processing method:
 
-### 基于 JavaScript 的分片处理 / JavaScript-based Chunking
-
-```javascript
-const { chunkedEncryptFile, chunkedDecryptFile } = require("./split_encrypt");
-const crypto = require("crypto");
-const fs = require("fs");
-
-// 使用之前保存的密钥
-const key = Buffer.from(fs.readFileSync("encryption_key.hex", "utf8"), "hex");
-
-async function processUltraLargeFile() {
-  try {
-    console.log("开始分片加密超大文件...");
-    await chunkedEncryptFile(
-      "aes",
-      key,
-      "./large_video.mp4",
-      "./large_video.mp4.enc"
-    );
-    console.log("加密完成");
-
-    console.log("开始分片解密超大文件...");
-    await chunkedDecryptFile(
-      "aes",
-      key,
-      "./large_video.mp4.enc",
-      "./large_video.mp4.dec"
-    );
-    console.log("解密完成");
-  } catch (error) {
-    console.error("处理过程中发生错误:", error);
-  }
-}
-
-processUltraLargeFile();
-```
-
-分片处理方法会将大文件分成多个小于 4GB 的块，分别加密/解密后再合并，从而绕过内存限制。这种方法适用于任何大小的文件，特别是超过 8GB 的超大文件。
-
-The chunked processing method divides large files into smaller chunks (less than 4GB each), encrypts/decrypts them separately, and then merges them back together. This bypasses memory limitations and is suitable for files of any size, especially those larger than 8GB.
-
 ### 基于 Rust 的分片处理（推荐） / Rust-based Chunking (Recommended)
 
 针对超大文件，我们现在提供了直接在 Rust 中实现的分片处理功能，性能更高，内存管理更高效：
@@ -292,7 +215,7 @@ The chunked processing method divides large files into smaller chunks (less than
 For extremely large files, we now provide chunking functionality implemented directly in Rust, which offers better performance and more efficient memory management:
 
 ```javascript
-const { chunkEncryptFile, chunkDecryptFile } = require("encryptor");
+const { chunkEncryptFile, chunkDecryptFile } = require("@zippybee/encryptor");
 const crypto = require("crypto");
 const fs = require("fs");
 
@@ -351,30 +274,9 @@ You can use the provided test script to verify the chunking functionality:
 
 ```bash
 # 使用 10MB 块大小测试 video.mp4 文件
-node chunk_test.js
+node example/index.js
 ```
 
 这个脚本会对文件进行分块加密和解密，并验证原始文件和解密后文件的完整性。
 
 This script will perform chunked encryption and decryption on a file and verify the integrity of the original and decrypted files.
-
-### 使用独立脚本处理超大文件 / Using Standalone Script for Extremely Large Files
-
-您也可以直接使用`split_encrypt.js`脚本处理超大文件：
-
-You can also directly use the `split_encrypt.js` script to process extremely large files:
-
-```bash
-# 加密和解密文件
-node split_encrypt.js /path/to/large_video.mp4
-
-# 只加密
-node split_encrypt.js /path/to/large_video.mp4 encrypt
-
-# 只解密
-node split_encrypt.js /path/to/large_video.mp4 decrypt
-```
-
-这个脚本会自动处理超大文件的分片加密和解密，并管理临时文件。
-
-This script automatically handles the chunked encryption and decryption of extremely large files and manages temporary files.
