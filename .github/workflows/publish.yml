@@ -1,7 +1,7 @@
 name: Build and Publish Node Addon
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # 允许手动触发工作流
 
 jobs:
   build:
@@ -42,10 +42,6 @@ jobs:
             platform: android
             arch: arm
             target: armv7-linux-androideabi
-          - os: ubuntu-latest
-            platform: freebsd
-            arch: x64
-            target: x86_64-unknown-freebsd
 
     steps:
       - uses: actions/checkout@v4
@@ -61,6 +57,17 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Install cross-compilation toolchain for aarch64
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Set Rust linker for aarch64-unknown-linux-gnu
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          mkdir -p .cargo
+          echo '[target.aarch64-unknown-linux-gnu]' >> .cargo/config.toml
+          echo 'linker = "aarch64-linux-gnu-gcc"' >> .cargo/config.toml
+
       - name: Install dependencies
         run: npm ci
 
@@ -72,19 +79,17 @@ jobs:
           node build.js
           node convert.js
 
-      - name: Copy built files to zippy-encyptor (Unix)
+      - name: Copy built files to output directory (Unix)
         if: matrix.os != 'windows-latest'
         run: |
-          find . -name "*.node" -exec cp {} zippy-encyptor/ \;
+          find . -maxdepth 2 -name "*.node" -exec cp {} zippy-encyptor/ \;
         shell: bash
 
-      - name: Copy built files to zippy-encyptor (Windows)
+      - name: Copy built files to output directory (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          Get-ChildItem -Recurse -Filter *.node | ForEach-Object {
-            Copy-Item $_.FullName -Destination "zippy-encyptor"
-          }
-        shell: pwsh
+          for %%i in (*.node) do copy "%%i" zippy-encyptor\
+        shell: cmd
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -99,6 +104,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Create output directory
+        run: mkdir -p zippy-encyptor
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -112,11 +120,8 @@ jobs:
             fi
           done
 
-      - name: List files in zippy-encyptor directory
+      - name: List combined files
         run: |
-          echo "Files in zippy-encyptor directory:"
-          ls -la zippy-encyptor/ || echo "zippy-encyptor directory not found"
-          echo ""
           echo "Summary of built platform binaries:"
           find zippy-encyptor/ -name "*.node" -type f | sort || echo "No .node files found"
 
