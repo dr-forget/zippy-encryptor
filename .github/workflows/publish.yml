@@ -1,4 +1,4 @@
-name: Build and Release Node Addon
+name: Build and Publish Node Addon
 
 on:
   workflow_dispatch:
@@ -21,14 +21,6 @@ jobs:
             platform: win32
             arch: ia32
             target: i686-pc-windows-msvc
-          - os: macos-latest
-            platform: darwin
-            arch: x64
-            target: x86_64-apple-darwin
-          - os: macos-latest
-            platform: darwin
-            arch: arm64
-            target: aarch64-apple-darwin
           - os: ubuntu-latest
             platform: linux
             arch: x64
@@ -38,108 +30,113 @@ jobs:
             arch: arm64
             target: aarch64-unknown-linux-gnu
           - os: ubuntu-latest
-            platform: android
+            platform: linux
             arch: arm
-            target: armv7-linux-androideabi
+            target: armv7-unknown-linux-gnueabihf
           - os: ubuntu-latest
             platform: android
             arch: arm64
             target: aarch64-linux-android
+          - os: ubuntu-latest
+            platform: android
+            arch: arm
+            target: armv7-linux-androideabi
+          - os: macos-latest
+            platform: darwin
+            arch: x64
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            platform: darwin
+            arch: arm64
+            target: aarch64-apple-darwin
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Use Node.js 22.x
         uses: actions/setup-node@v3
         with:
           node-version: 22.x
           cache: "npm"
 
-      - name: Setup Rust toolchain
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install cross toolchain (Linux ARM)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
-
-      - name: Install cross toolchain (Android ARM)
-        if: matrix.target == 'armv7-linux-androideabi'
-        run: sudo apt-get update && sudo apt-get install -y gcc-arm-linux-gnueabihf
-
       - name: Install dependencies
         run: npm ci
 
+      - name: Install cross-compilation tools for ARM
+        if: matrix.target == 'aarch64-unknown-linux-gnu' || matrix.target == 'armv7-unknown-linux-gnueabihf'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+                              gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+
+      - name: Set CC and CXX for ARM targets
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+
+      - name: Set CC and CXX for ARMv7 targets
+        if: matrix.target == 'armv7-unknown-linux-gnueabihf'
+        run: echo "CC=arm-linux-gnueabihf-gcc" >> $GITHUB_ENV
+
       - name: Build native addon
-        run: |
-          npx napi build --release --platform --target ${{ matrix.target }}
+        run: npx napi build --platform --release --target ${{ matrix.target }}
 
-      - name: Run additional build scripts
+      - name: Rename .node file
         run: |
-          node build.js
-          node convert.js
+          FILE_NAME=encryptor.${{ matrix.platform }}-${{ matrix.arch }}.node
+          mv *.node $FILE_NAME
+        shell: bash
 
-      - name: Copy built .node file to output directory (Unix)
-        if: matrix.os != 'windows-latest'
+      - name: Copy .node file to output (Linux/macOS)
+        if: runner.os != 'Windows'
         run: |
-          mkdir -p ${{ env.PACKAGE_DIR }}
-          find ./ -name "*.node" -exec cp {} ${{ env.PACKAGE_DIR }}/ \;
+          mkdir -p $PACKAGE_DIR
+          cp encryptor.*.node $PACKAGE_DIR/
 
-      - name: Copy built .node file to output directory (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: cmd
+      - name: Copy .node file to output (Windows)
+        if: runner.os == 'Windows'
         run: |
           mkdir %PACKAGE_DIR%
-          for /R %%i in (*.node) do copy "%%i" %PACKAGE_DIR%\
-
-      - name: Rename .node file with platform info
-        shell: bash
-        run: |
-          cd ${{ env.PACKAGE_DIR }}
-          file=$(find . -name "*.node" | head -n1)
-          name="encryptor.${{ matrix.platform }}-${{ matrix.arch }}.node"
-          mv "$file" "$name"
-          ls -la
+          for %%f in (encryptor.*.node) do copy %%f %PACKAGE_DIR%\
+        shell: cmd
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: encryptor-${{ matrix.platform }}-${{ matrix.arch }}
-          path: ${{ env.PACKAGE_DIR }}/
+          name: encryptor.${{ matrix.platform }}-${{ matrix.arch }}.node
+          path: ${{ env.PACKAGE_DIR }}/encryptor.${{ matrix.platform }}-${{ matrix.arch }}.node
           retention-days: 7
 
   release:
     needs: build
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Read version from package.json
+      - name: Read version
         id: version
         run: |
-          echo "VERSION=$(jq -r .version zippy-encyptor/package.json)" >> $GITHUB_OUTPUT
+          echo "version=$(jq -r .version $PACKAGE_DIR/package.json)" >> $GITHUB_OUTPUT
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts/
+          path: $PACKAGE_DIR
 
-      - name: Create release directory
-        run: mkdir -p release
-
-      - name: Collect .node files
+      - name: List all .node files
         run: |
-          find artifacts -name "*.node" -exec cp {} release/ \;
-          echo "Release contents:"
-          ls -la release
+          echo "Built .node files:"
+          find $PACKAGE_DIR -name "*.node" -exec ls -l {} \;
 
-      - name: Create GitHub release
+      - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.VERSION }}
-          name: v${{ steps.version.outputs.VERSION }}
-          files: release/*.node
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          files: ${{ env.PACKAGE_DIR }}/*.node
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
